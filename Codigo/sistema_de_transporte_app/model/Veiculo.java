@@ -19,7 +19,6 @@ public class Veiculo {
 
     public void atualizarLocalizacao() { /* stub */ }
 
-    // Getters e Setters
     public String getCategoria() { return categoria; }
     public void setCategoria(String categoria) { this.categoria = categoria; }
     public String getModelo() { return modelo; }

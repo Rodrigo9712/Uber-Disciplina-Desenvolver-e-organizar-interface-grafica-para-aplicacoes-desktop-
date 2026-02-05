@@ -1,4 +1,3 @@
-
 package sistema_de_transporte_app;
 
 import repository.impl.CorridaRepository;
@@ -15,7 +14,7 @@ import java.awt.*;
 
 public class TelaPrincipal extends JFrame {
 
-    // Repositórios (no pacote repository.impl)
+    // Repositórios (in-memory)
     private final PassageiroRepository passageiroRepo = new PassageiroRepository();
     private final MotoristaRepository motoristaRepo = new MotoristaRepository();
     private final VeiculoRepository veiculoRepo = new VeiculoRepository();
@@ -33,11 +32,15 @@ public class TelaPrincipal extends JFrame {
     private MotoristaView motoristaView;
     private VeiculoView veiculoView;
 
-    // UI Login
+    // UI (abas)
     private final JTabbedPane tabs = new JTabbedPane();
+
+    // ===== Simples TELA DE LOGIN na aba "Login" =====
     private final JPanel loginPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-    private final JTextField txtCpfLogin = new JTextField(14);
-    private final JLabel lblUsuario = new JLabel("Não logado");
+    private final JTextField txtUsuario = new JTextField(12);
+    private final JPasswordField txtSenha = new JPasswordField(12);
+    private final JLabel lblUsuarioLogado = new JLabel("Não logado");
+    // =================================================
 
     public TelaPrincipal() {
         super("Sistema de Transporte - Demo");
@@ -57,21 +60,53 @@ public class TelaPrincipal extends JFrame {
         setLayout(new BorderLayout());
         add(tabs, BorderLayout.CENTER);
 
+        // Desabilita a aba Corrida até logar
         habilitarAbaCorrida(false);
 
-        seed(); // dados de exemplo
+        // Dados de exemplo (inclui usuário/senha)
+        seed();
     }
 
+    // ----- Login simples (usuário/senha em memória) -----
     private void montarLogin() {
         JButton btnLogin = new JButton("Entrar");
         btnLogin.addActionListener(e -> realizarLogin());
 
-        loginPanel.add(new JLabel("CPF do Passageiro:"));
-        loginPanel.add(txtCpfLogin);
+        loginPanel.add(new JLabel("Usuário:"));
+        loginPanel.add(txtUsuario);
+        loginPanel.add(new JLabel("Senha:"));
+        loginPanel.add(txtSenha);
         loginPanel.add(btnLogin);
         loginPanel.add(new JLabel(" | Usuário: "));
-        loginPanel.add(lblUsuario);
+        loginPanel.add(lblUsuarioLogado);
     }
+
+    private void realizarLogin() {
+        String usuario = txtUsuario.getText().trim();
+        String senha = new String(txtSenha.getPassword());
+
+        // Procura um passageiro cujo usuario/senha batam
+        Passageiro p = passageiroController.listarTodos()
+                .stream()
+                .filter(x -> usuario.equals(x.getUsuario()) && senha.equals(x.getSenha()))
+                .findFirst()
+                .orElse(null);
+
+        if (p == null) {
+            JOptionPane.showMessageDialog(this,
+                    "Usuário ou senha incorretos!",
+                    "Login inválido",
+                    JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        // Login OK → habilita Corrida e vai pra lá
+        lblUsuarioLogado.setText(p.getNome());
+        corridaView.setCpfPassageiro(p.getCpf()); // CPF já preenchido na tela de Corrida
+        habilitarAbaCorrida(true);
+        tabs.setSelectedIndex(1); // vai para Corrida
+    }
+    // -----------------------------------------------------
 
     private void montarTabs() {
         corridaView = new CorridaView(corridaController, passageiroController);
@@ -80,32 +115,21 @@ public class TelaPrincipal extends JFrame {
         veiculoView = new VeiculoView(veiculoController);
     }
 
-    private void realizarLogin() {
-        String cpf = txtCpfLogin.getText().trim();
-        Passageiro p = passageiroController.buscarPorCpf(cpf);
-        if (p == null) {
-            JOptionPane.showMessageDialog(this, "CPF não encontrado. Cadastre o passageiro na aba 'Passageiro'.", "Login", JOptionPane.WARNING_MESSAGE);
-            lblUsuario.setText("Não logado");
-            habilitarAbaCorrida(false);
-            return;
-        }
-        lblUsuario.setText(p.getNome() + " (" + p.getCpf() + ")");
-        corridaView.setCpfPassageiro(cpf);
-        habilitarAbaCorrida(true);
-        tabs.setSelectedIndex(1); // ir para Corrida
-    }
-
     private void habilitarAbaCorrida(boolean habilitar) {
         tabs.setEnabledAt(1, habilitar);
     }
 
     private void seed() {
-        // Passageiro de teste
-        passageiroController.cadastrar("Cliente Teste", "51999990000", "11122233344");
-        // Motoristas de teste (uma de cada categoria)
-        motoristaController.cadastrarMotoristaComVeiculo("João Motorista", "DOC-001", "ECONOMICO", "Onix", "ABC1A23", "Prata");
-        motoristaController.cadastrarMotoristaComVeiculo("Maria Driver", "DOC-002", "SUV", "Duster", "DEF4B56", "Preto");
-        motoristaController.cadastrarMotoristaComVeiculo("Carlos Lux", "DOC-003", "LUXO", "BMW 320i", "GHI7C89", "Branco");
+        // Passageiro com login/senha
+        Passageiro p = new Passageiro("Rodrigo", "51999998888", "12345678900");
+        p.setUsuario("Rodrigo");
+        p.setSenha("123456");
+        passageiroRepo.salvar(p);
+
+        // Motoristas (uma de cada categoria)
+        motoristaController.cadastrarMotoristaComVeiculo("Pedro Da Rocha", "DOC-121", "ECONOMICO", "Fiat Mobi", "BRA2E45", "Prata");
+        motoristaController.cadastrarMotoristaComVeiculo("Ana Clara Oliveira", "DOC-232", "SUV", "Jeep Compass", "DEF4B56", "Preto");
+        motoristaController.cadastrarMotoristaComVeiculo("André Souza", "DOC-143", "LUXO", "BMW 320i", "FMS7A02", "Branco");
     }
 
     public static void main(String[] args) {

@@ -1,4 +1,3 @@
-
 package sistema_de_transporte_app.view;
 
 import sistema_de_transporte_app.controller.PassageiroController;
@@ -13,16 +12,25 @@ public class PassageiroView extends JPanel {
     private final JTextField txtNome = new JTextField(20);
     private final JTextField txtTelefone = new JTextField(15);
     private final JTextField txtCpf = new JTextField(14);
+
+    // NOVO: campos de login
+    private final JTextField txtUsuario = new JTextField(20);
+    private final JPasswordField txtSenha = new JPasswordField(20);
+
     private final JTextArea output = new JTextArea(7, 40);
 
     public PassageiroView(PassageiroController passageiroController) {
         this.passageiroController = passageiroController;
-        setLayout(new BorderLayout(8,8));
+        setLayout(new BorderLayout(8, 8));
 
-        JPanel form = new JPanel(new GridLayout(0,2,6,6));
+        JPanel form = new JPanel(new GridLayout(0, 2, 6, 6));
         form.add(new JLabel("Nome:")); form.add(txtNome);
         form.add(new JLabel("Telefone:")); form.add(txtTelefone);
         form.add(new JLabel("CPF:")); form.add(txtCpf);
+
+        // NOVO
+        form.add(new JLabel("Usuário:")); form.add(txtUsuario);
+        form.add(new JLabel("Senha:")); form.add(txtSenha);
 
         JButton btnCadastrar = new JButton("Cadastrar passageiro");
         btnCadastrar.addActionListener(e -> cadastrar());
@@ -45,9 +53,15 @@ public class PassageiroView extends JPanel {
             Passageiro p = passageiroController.cadastrar(
                     txtNome.getText().trim(),
                     txtTelefone.getText().trim(),
-                    txtCpf.getText().trim()
+                    txtCpf.getText().trim(),
+                    txtUsuario.getText().trim(),
+                    new String(txtSenha.getPassword()).trim()
             );
             output.append("OK: " + p + "\n");
+
+            // opcional: limpar senha no cadastro
+            txtSenha.setText("");
+
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this, ex.getMessage(), "Erro", JOptionPane.ERROR_MESSAGE);
         }

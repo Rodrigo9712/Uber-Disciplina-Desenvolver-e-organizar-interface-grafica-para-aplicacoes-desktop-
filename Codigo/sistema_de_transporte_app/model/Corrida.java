@@ -47,7 +47,6 @@ public class Corrida {
         if (!"FINALIZADA".equals(status)) this.status = "CANCELADA";
     }
 
-    // Getters e Setters
     public long getId() { return id; }
     public void setId(long id) { this.id = id; }
     public int getTempoEstimado() { return tempoEstimado; }

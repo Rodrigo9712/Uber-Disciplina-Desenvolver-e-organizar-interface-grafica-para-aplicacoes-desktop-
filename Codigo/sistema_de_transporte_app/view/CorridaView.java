@@ -1,4 +1,3 @@
-
 package sistema_de_transporte_app.view;
 
 import sistema_de_transporte_app.controller.CorridaController;
@@ -11,8 +10,14 @@ import sistema_de_transporte_app.model.Passageiro;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.format.DateTimeFormatter;
 
+/**
+ * CorridaView sem pedir tempo ou distância.
+ * A distância é estimada automaticamente e de modo determinístico a partir de Origem + Destino.
+ */
 public class CorridaView extends JPanel {
     private final CorridaController corridaController;
     private final PassageiroController passageiroController;
@@ -20,11 +25,12 @@ public class CorridaView extends JPanel {
     private final JTextField txtCpfPassageiro = new JTextField(14);
     private final JTextField txtOrigem = new JTextField(20);
     private final JTextField txtDestino = new JTextField(20);
-    private final JTextField txtDistancia = new JTextField(6);
     private final JComboBox<String> cbCategoria = new JComboBox<>(new String[]{"ECONOMICO", "SUV", "LUXO"});
 
     private final JLabel lblEstimado = new JLabel("R$ 0,00");
-    private final JTextArea output = new JTextArea(16, 72);
+    private final JLabel lblDistanciaCalc = new JLabel("Distância (estimada): 0,0 km");
+
+    private final JTextArea output = new JTextArea(18, 72);
 
     private Long corridaAtualId = null;
 
@@ -51,19 +57,23 @@ public class CorridaView extends JPanel {
         c.gridx = 0; c.gridy = row; form.add(new JLabel("Destino:"), c);
         c.gridx = 1; c.gridy = row++; form.add(txtDestino, c);
 
-        c.gridx = 0; c.gridy = row; form.add(new JLabel("Distância (km):"), c);
-        c.gridx = 1; c.gridy = row++; form.add(txtDistancia, c);
-
         c.gridx = 0; c.gridy = row; form.add(new JLabel("Categoria:"), c);
         c.gridx = 1; c.gridy = row++; form.add(cbCategoria, c);
 
-        // ---------- ESTIMATIVA ----------
-        JPanel estimativa = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
-        JLabel lbl = new JLabel("Estimativa:");
-        lbl.setFont(lbl.getFont().deriveFont(Font.BOLD));
+        // ---------- ESTIMATIVAS ----------
+        JPanel estimativas = new JPanel(new GridBagLayout());
+        GridBagConstraints ce = new GridBagConstraints();
+        ce.insets = new Insets(2, 4, 2, 4);
+        ce.anchor = GridBagConstraints.WEST;
+
+        JLabel lbl1 = new JLabel("Estimativa:");
+        lbl1.setFont(lbl1.getFont().deriveFont(Font.BOLD));
         lblEstimado.setFont(lblEstimado.getFont().deriveFont(Font.BOLD));
-        estimativa.add(lbl);
-        estimativa.add(lblEstimado);
+
+        ce.gridx = 0; ce.gridy = 0; estimativas.add(lbl1, ce);
+        ce.gridx = 1; ce.gridy = 0; estimativas.add(lblEstimado, ce);
+
+        ce.gridx = 0; ce.gridy = 1; ce.gridwidth = 2; estimativas.add(lblDistanciaCalc, ce);
 
         // ---------- BOTÕES ----------
         JPanel botoes = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
@@ -79,7 +89,7 @@ public class CorridaView extends JPanel {
 
         // ---------- OUTPUT ----------
         output.setEditable(false);
-        output.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13)); // monoespaçado para alinhar
+        output.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
         output.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(new Color(200,200,200)),
                 new EmptyBorder(8,8,8,8)
@@ -88,25 +98,34 @@ public class CorridaView extends JPanel {
         // ---------- LAYOUT PRINCIPAL ----------
         JPanel top = new JPanel(new BorderLayout(8,8));
         top.add(form, BorderLayout.NORTH);
-        top.add(estimativa, BorderLayout.CENTER);
+        top.add(estimativas, BorderLayout.CENTER);
         top.add(botoes, BorderLayout.SOUTH);
 
         add(top, BorderLayout.NORTH);
         add(new JScrollPane(output), BorderLayout.CENTER);
     }
 
-    // Permite que a TelaPrincipal preencha o CPF após o login
+    /** Preenche o CPF após login pela TelaPrincipal. */
     public void setCpfPassageiro(String cpf) { txtCpfPassageiro.setText(cpf); }
 
     // ==================== AÇÕES ====================
     private void calcular() {
         try {
-            double dist = Double.parseDouble(txtDistancia.getText().trim());
-            String cat = cbCategoria.getSelectedItem().toString();
-            double valor = corridaController.calcularValor(cat, dist);
+            String cat = categoria();
+            String origem = normalizar(txtOrigem.getText());
+            String destino = normalizar(txtDestino.getText());
+            if (origem.isEmpty() || destino.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Preencha Origem e Destino.", "Campos obrigatórios", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            double distKm = estimarDistanciaKmDeterministica(origem, destino, cat);
+            lblDistanciaCalc.setText(String.format("Distância (estimada): %.1f km", distKm));
+
+            double valor = corridaController.calcularValor(cat, distKm);
             lblEstimado.setText(String.format("R$ %.2f", valor));
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Distância inválida.", "Erro", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Erro ao calcular estimativa.", "Erro", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -118,16 +137,26 @@ public class CorridaView extends JPanel {
                 JOptionPane.showMessageDialog(this, "CPF não encontrado. Cadastre o passageiro.", "Login", JOptionPane.WARNING_MESSAGE);
                 return;
             }
-            double dist = Double.parseDouble(txtDistancia.getText().trim());
-            String cat = cbCategoria.getSelectedItem().toString();
+
+            String cat = categoria();
+            String origem = normalizar(txtOrigem.getText());
+            String destino = normalizar(txtDestino.getText());
+            if (origem.isEmpty() || destino.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Preencha Origem e Destino.", "Campos obrigatórios", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            double distKm = estimarDistanciaKmDeterministica(origem, destino, cat);
+            lblDistanciaCalc.setText(String.format("Distância (estimada): %.1f km", distKm));
 
             Corrida corrida = corridaController.solicitarCorrida(
-                    cpf, txtOrigem.getText().trim(), txtDestino.getText().trim(), dist, cat
+                    cpf, origem, destino, distKm, cat
             );
             corridaAtualId = corrida.getId();
             lblEstimado.setText(String.format("R$ %.2f", corrida.getValor()));
+
             imprimirCabecalho("CORRIDA SOLICITADA");
-            output.append(formatarCorrida(corrida));
+            output.append(formatarCorrida(corrida, distKm));
             imprimirRodape();
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this, ex.getMessage(), "Erro ao solicitar", JOptionPane.ERROR_MESSAGE);
@@ -160,7 +189,62 @@ public class CorridaView extends JPanel {
         corridaAtualId = null;
     }
 
-    // ==================== FORMATAÇÕES ====================
+    // ==================== LÓGICA DE DISTÂNCIA SEM INPUT ====================
+    private String categoria() {
+        return cbCategoria.getSelectedItem().toString();
+    }
+
+    private String normalizar(String s) {
+        return s == null ? "" : s.trim();
+    }
+
+    /**
+     * Distância estimada de forma determinística a partir de origem+destino.
+     * 1) Gera um hash SHA-256 da string "origem->destino".
+     * 2) Converte parte do hash em número para obter base entre 5 e 35 km.
+     * 3) Aplica multiplicador leve pela categoria.
+     */
+    private double estimarDistanciaKmDeterministica(String origem, String destino, String categoria) {
+        double baseKm = 5.0;      // mínimo
+        double faixaKm = 30.0;    // varia até 35 (5 + 30)
+        double numero = mapHashToUnit(origem + "->" + destino); // 0..1
+        double km = baseKm + faixaKm * numero;
+
+        double multCat;
+        switch (categoria.toUpperCase()) {
+            case "SUV":  multCat = 1.08; break;
+            case "LUXO": multCat = 1.12; break;
+            default:     multCat = 1.00; // ECONOMICO
+        }
+        km *= multCat;
+
+        // arredonda para uma casa e limita entre 5.0 e 40.0 por segurança visual
+        km = Math.max(5.0, Math.min(40.0, Math.round(km * 10.0) / 10.0));
+        return km;
+    }
+
+    /**
+     * Mapeia um hash SHA-256 para um número contínuo entre 0 e 1.
+     */
+    private double mapHashToUnit(String input) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));
+            // Usa os 8 primeiros bytes como inteiro sem sinal
+            long acc = 0;
+            for (int i = 0; i < 8; i++) {
+                acc = (acc << 8) | (hash[i] & 0xFF);
+            }
+            // normaliza para 0..1 usando divisão por 2^64-1
+            return (acc & 0xFFFFFFFFFFFFFFFFL) / (double) (0x1p64 - 1); // 2^64 - 1
+        } catch (Exception e) {
+            // fallback simples
+            int h = Math.abs(input.hashCode());
+            return (h % 10000) / 9999.0;
+        }
+    }
+
+    // ==================== FORMATAÇÃO ====================
     private void imprimirCabecalho(String titulo) {
         output.append("\n");
         output.append("========================================\n");
@@ -172,15 +256,12 @@ public class CorridaView extends JPanel {
         output.append("========================================\n");
     }
 
-    private String formatarCorrida(Corrida c) {
+    private String formatarCorrida(Corrida c, double distKm) {
         DateTimeFormatter dtf = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
         String solicitada = c.getSolicitadaEm() != null ? c.getSolicitadaEm().format(dtf) : "-";
         String finalizada = c.getFinalizadaEm() != null ? c.getFinalizadaEm().format(dtf) : "-";
+        String statusBonito = c.getStatus() == null ? "-" : c.getStatus().replace('_', ' ').toUpperCase();
 
-        String statusBonito = c.getStatus() == null ? "-"
-                : c.getStatus().replace('_', ' ').toUpperCase();
-
-        // Dados do motorista/veículo (com segurança contra null)
         Motorista mot = c.getMotorista();
         String nomeMot = mot != null ? valueOr(mot.getNome(), "-") : "-";
         String docMot = mot != null ? valueOr(mot.getDocumentoVeiculo(), "-") : "-";
@@ -204,8 +285,7 @@ public class CorridaView extends JPanel {
         sb.append(String.format("Cor.................: %s%n", cor));
         sb.append(String.format("Origem..............: %s%n", valueOr(c.getOrigem(), "-")));
         sb.append(String.format("Destino.............: %s%n", valueOr(c.getDestino(), "-")));
-        sb.append(String.format("Distância...........: %.1f km%n", c.getDistanciaKm()));
-        sb.append(String.format("Tempo estimado......: %d min%n", c.getTempoEstimado()));
+        sb.append(String.format("Distância (estimada): %.1f km%n", distKm));
         sb.append(String.format("Valor...............: R$ %.2f%n", c.getValor()));
         sb.append(String.format("Status..............: %s%n", statusBonito));
         sb.append(String.format("Solicitada em.......: %s%n", solicitada));
@@ -213,7 +293,6 @@ public class CorridaView extends JPanel {
         return sb.toString();
     }
 
-    // Helpers
     private String valueOr(String s, String def) { return (s == null || s.isEmpty()) ? def : s; }
     private String safeName(Passageiro p) { return p == null ? "-" : valueOr(p.getNome(), "-"); }
 }
